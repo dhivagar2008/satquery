@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: satquery-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - ENVIRONMENT=development
+      - CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+      - DATABASE_URL=postgresql://satquery:satquery_secret@db:5432/satquery_db
+      - REDIS_URL=redis://redis:6379/0
+      - GEE_PROJECT_ID=${GEE_PROJECT_ID:-satquery-cloud}
+      - GEE_SERVICE_ACCOUNT=${GEE_SERVICE_ACCOUNT:-}
+      - GEE_PRIVATE_KEY_JSON_BASE64=${GEE_PRIVATE_KEY_JSON_BASE64:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - NASA_FIRMS_MAP_KEY=${NASA_FIRMS_MAP_KEY:-}
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: satquery-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_MAPBOX_TOKEN=${NEXT_PUBLIC_MAPBOX_TOKEN:-}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: satquery-db
+    environment:
+      - POSTGRES_USER=satquery
+      - POSTGRES_PASSWORD=satquery_secret
+      - POSTGRES_DB=satquery_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: satquery-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
